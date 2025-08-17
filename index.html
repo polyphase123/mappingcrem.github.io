@@ -67,8 +67,8 @@
             background-color: #2563eb;
             color: white;
         }
-        .program-btn.active {
-             background-color: #16a34a; /* Green for active program */
+        .program-btn.active-geop {
+             background-color: #7e22ce; /* Purple for active GEOP program */
         }
     </style>
     <!-- Leaflet CSS and JS -->
@@ -132,10 +132,10 @@
                     <p class="text-sm text-blue-600"><span id="visayas-eus" class="font-bold">0</span> EUs</p>
                     <p class="text-sm text-blue-600"><span id="visayas-demand" class="font-bold">0</span> MW</p>
                 </div>
-                <div class="p-3 bg-yellow-100 rounded-lg shadow-sm">
-                    <h3 class="font-semibold text-yellow-700">Mindanao</h3>
-                    <p class="text-sm text-yellow-600"><span id="mindanao-eus" class="font-bold">0</span> EUs</p>
-                    <p class="text-sm text-yellow-600"><span id="mindanao-demand" class="font-bold">0</span> MW</p>
+                <div class="p-3 bg-amber-100 rounded-lg shadow-sm">
+                    <h3 class="font-semibold text-amber-700">Mindanao</h3>
+                    <p class="text-sm text-amber-600"><span id="mindanao-eus" class="font-bold">0</span> EUs</p>
+                    <p class="text-sm text-amber-600"><span id="mindanao-demand" class="font-bold">0</span> MW</p>
                 </div>
             </div>
         </div>
@@ -174,12 +174,12 @@
                 CREM: {
                     Luzon: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #dc2626;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] }),
                     Visayas: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #2563eb;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] }),
-                    Mindanao: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #facc15;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] })
+                    Mindanao: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #b45309;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] })
                 },
                 GEOP: {
-                    Luzon: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #84cc16;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] }),
-                    Visayas: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #22c55e;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] }),
-                    Mindanao: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #15803d;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] })
+                    Luzon: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #a855f7;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] }),
+                    Visayas: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #7e22ce;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] }),
+                    Mindanao: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #581c87;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] })
                 }
             };
             
@@ -1144,9 +1144,9 @@
                     legendColors.innerHTML = `
                         <h3 class="font-semibold text-gray-700 mb-2">Marker Colors (GEOP):</h3>
                         <ul class="list-disc list-inside text-gray-700">
-                            <li class="flex items-center"><span class="inline-block w-5 h-5 rounded-full mr-2 border-2 border-white" style="background-color: #84cc16;"></span> Luzon</li>
-                            <li class="flex items-center mt-1"><span class="inline-block w-5 h-5 rounded-full mr-2 border-2 border-white" style="background-color: #22c55e;"></span> Visayas</li>
-                            <li class="flex items-center mt-1"><span class="inline-block w-5 h-5 rounded-full mr-2 border-2 border-white" style="background-color: #15803d;"></span> Mindanao</li>
+                            <li class="flex items-center"><span class="inline-block w-5 h-5 rounded-full mr-2 border-2 border-white" style="background-color: #a855f7;"></span> Luzon</li>
+                            <li class="flex items-center mt-1"><span class="inline-block w-5 h-5 rounded-full mr-2 border-2 border-white" style="background-color: #7e22ce;"></span> Visayas</li>
+                            <li class="flex items-center mt-1"><span class="inline-block w-5 h-5 rounded-full mr-2 border-2 border-white" style="background-color: #581c87;"></span> Mindanao</li>
                         </ul>`;
                     legendDefinitions.innerHTML = `
                         <h3 class="font-semibold text-gray-700 mb-2">Program Definition:</h3>
@@ -1157,8 +1157,9 @@
             // Function to filter data based on search and other filters
             function applyFilters() {
                 const selectedNspName = nspSelect.value;
-                const selectedProgram = programButtons.querySelector('.active').dataset.program;
-                const activePhase = filterButtons.querySelector('.active').dataset.phase;
+                const selectedProgram = programButtons.querySelector('.active, .active-geop').dataset.program;
+                const activePhaseButton = filterButtons.querySelector('.active');
+                const activePhase = activePhaseButton ? activePhaseButton.dataset.phase : 'All';
                 
                 const filteredData = euData.filter(item => {
                     const matchesNSP = selectedNspName === 'All' || item.name === selectedNspName;
@@ -1214,15 +1215,21 @@
             // Event listener for program buttons
             programButtons.addEventListener('click', (e) => {
                 if (e.target.tagName === 'BUTTON') {
-                    programButtons.querySelectorAll('button').forEach(btn => btn.classList.remove('active', 'bg-blue-600', 'bg-green-600'));
-                    programButtons.querySelectorAll('button').forEach(btn => btn.classList.add('bg-gray-500'));
-                    e.target.classList.add('active');
+                    programButtons.querySelectorAll('button').forEach(btn => {
+                        btn.classList.remove('active', 'active-geop', 'bg-blue-600', 'bg-purple-600');
+                        btn.classList.add('bg-gray-500');
+                    });
+                    
                     e.target.classList.remove('bg-gray-500');
+                    
+
                     if(e.target.dataset.program === 'CREM') {
+                        e.target.classList.add('active');
                         e.target.classList.add('bg-blue-600');
                         filterButtons.style.display = 'flex';
                     } else {
-                        e.target.classList.add('bg-green-600');
+                        e.target.classList.add('active-geop');
+                        e.target.classList.add('bg-purple-600');
                         filterButtons.style.display = 'none';
                     }
                     applyFilters();
