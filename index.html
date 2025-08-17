@@ -38,31 +38,6 @@
         .popup-details {
             display: none;
         }
-
-        /* Custom styles for the new dot markers */
-        .marker-dot div {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            border: 1px solid white;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.5);
-            transition: all 0.2s ease-in-out;
-        }
-        .marker-dot.highlight div {
-            animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse {
-            0% {
-                transform: scale(1);
-            }
-            50% {
-                transform: scale(1.5);
-                box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.5);
-            }
-            100% {
-                transform: scale(1);
-            }
-        }
         .active {
             background-color: #2563eb;
             color: white;
@@ -168,20 +143,6 @@
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             }).addTo(map);
-
-            // Define custom DivIcons for each program and island group
-            const icons = {
-                CREM: {
-                    Luzon: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #dc2626;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] }),
-                    Visayas: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #2563eb;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] }),
-                    Mindanao: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #b45309;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] })
-                },
-                GEOP: {
-                    Luzon: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #a855f7;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] }),
-                    Visayas: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #7e22ce;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] }),
-                    Mindanao: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #581c87;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] })
-                }
-            };
             
             // Consolidated data from the documents
             const euData = [
@@ -1019,10 +980,40 @@
                         </div>`;
                 }
 
-                const marker = L.marker([item.lat, item.lng], { icon: icons[program][item.island] })
+                const marker = L.circleMarker([item.lat, item.lng], getMarkerStyle(program, item.island))
                     .bindPopup(popupContent);
+                marker.options.originalStyle = getMarkerStyle(program, item.island);
+                marker.options.nspName = item.name;
                 markers.push(marker);
                 return marker;
+            }
+
+            function getMarkerStyle(program, island) {
+                const baseStyle = {
+                    radius: 6,
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.9,
+                    color: '#ffffff' // White border for all markers
+                };
+
+                const colors = {
+                    CREM: {
+                        Luzon: '#dc2626',
+                        Visayas: '#2563eb',
+                        Mindanao: '#b45309'
+                    },
+                    GEOP: {
+                        Luzon: '#a855f7',
+                        Visayas: '#7e22ce',
+                        Mindanao: '#581c87'
+                    }
+                };
+
+                return {
+                    ...baseStyle,
+                    fillColor: colors[program][island]
+                };
             }
 
             // Function to render markers based on filters
@@ -1130,7 +1121,7 @@
                         <ul class="list-disc list-inside text-gray-700">
                             <li class="flex items-center"><span class="inline-block w-5 h-5 rounded-full bg-red-600 mr-2 border-2 border-white"></span> Luzon</li>
                             <li class="flex items-center mt-1"><span class="inline-block w-5 h-5 rounded-full bg-blue-600 mr-2 border-2 border-white"></span> Visayas</li>
-                            <li class="flex items-center mt-1"><span class="inline-block w-5 h-5 rounded-full bg-yellow-400 mr-2 border-2 border-white"></span> Mindanao</li>
+                            <li class="flex items-center mt-1"><span class="inline-block w-5 h-5 rounded-full bg-amber-700 mr-2 border-2 border-white"></span> Mindanao</li>
                         </ul>`;
                     legendDefinitions.innerHTML = `
                         <h3 class="font-semibold text-gray-700 mb-2">Phase Definitions:</h3>
@@ -1196,16 +1187,18 @@
                 const selectedNSP = euData.find(item => item.name === nspSelect.value);
                 if (selectedNSP) {
                     map.flyTo([selectedNSP.lat, selectedNSP.lng], 10);
-                    const markerToHighlight = markers.find(m => m.getLatLng().lat === selectedNSP.lat && m.getLatLng().lng === selectedNSP.lng);
+                    const markerToHighlight = markers.find(m => m.options.nspName === nspSelect.value);
                     if (markerToHighlight) {
                         markerToHighlight.openPopup();
-                        const iconElement = markerToHighlight._icon;
-                        if (iconElement) {
-                             iconElement.classList.add('highlight');
-                             setTimeout(() => {
-                                 iconElement.classList.remove('highlight');
-                             }, 3000);
-                        }
+                        const originalStyle = markerToHighlight.options.originalStyle;
+                        const highlightStyle = { ...originalStyle, radius: 12, color: '#f59e0b', weight: 3 };
+
+                        markerToHighlight.setStyle(highlightStyle);
+                        markerToHighlight.bringToFront();
+
+                        setTimeout(() => {
+                            markerToHighlight.setStyle(originalStyle);
+                        }, 3000);
                     }
                 } else {
                     map.setView([12.8797, 121.7740], 6);
