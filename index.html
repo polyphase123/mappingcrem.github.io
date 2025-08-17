@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retail Electricity Market Map</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        #map {
+            height: 80vh;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        /* Custom styles for Leaflet popups */
+        .leaflet-popup-content-wrapper {
+            border-radius: 0.5rem;
+        }
+        .leaflet-popup-content {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.875rem;
+            line-height: 1.25rem;
+            font-weight: 500;
+            width: 250px !important;
+        }
+
+        .popup-section-title {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .popup-details {
+            display: none;
+        }
+
+        /* Custom styles for the new dot markers */
+        .marker-dot div {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            border: 1px solid white;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+            transition: all 0.2s ease-in-out;
+        }
+        .marker-dot.highlight div {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.5);
+                box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.5);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+        .active {
+            background-color: #2563eb;
+            color: white;
+        }
+        .program-btn.active {
+             background-color: #16a34a; /* Green for active program */
+        }
+    </style>
+    <!-- Leaflet CSS and JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body class="bg-gray-100 p-4 min-h-screen flex flex-col items-center">
+    <!-- Main container for the app -->
+    <div class="container mx-auto p-4 bg-white rounded-xl shadow-lg">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-2">Philippine Retail Electricity Market Map</h1>
+        <p class="text-center text-gray-600 mb-6">Interactive map of Electric Utilities based on CREM and GEOP data.</p>
+        
+        <!-- Search and Filter Controls -->
+        <div class="flex flex-col md:flex-row items-center justify-between mb-4 space-y-4 md:space-y-0 md:space-x-4">
+            <select id="nsp-select" class="flex-grow p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="All">Select an NSP...</option>
+            </select>
+            <button id="back-button" class="hidden px-4 py-2 text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500">Back to All</button>
+        </div>
+        
+        <div class="flex flex-col md:flex-row justify-between items-start mb-4 gap-4">
+            <!-- Program Selection -->
+            <div id="program-buttons" class="flex flex-wrap justify-center gap-2">
+                <button data-program="CREM" class="program-btn px-4 py-2 text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 active">CREM</button>
+                <button data-program="GEOP" class="program-btn px-4 py-2 text-sm font-medium rounded-md text-white bg-gray-500 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500">GEOP</button>
+            </div>
+            <!-- Phase Filters -->
+            <div id="filter-buttons" class="flex flex-wrap justify-center md:justify-end gap-2">
+                <button data-phase="All" class="px-4 py-2 text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 active">All</button>
+                <button data-phase="1" class="px-4 py-2 text-sm font-medium rounded-md text-white bg-gray-500 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500">Phase I</button>
+                <button data-phase="2" class="px-4 py-2 text-sm font-medium rounded-md text-white bg-gray-500 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500">Phase II</button>
+                <button data-phase="3" class="px-4 py-2 text-sm font-medium rounded-md text-white bg-gray-500 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500">Phase III</button>
+                <button data-phase="4" class="px-4 py-2 text-sm font-medium rounded-md text-white bg-gray-500 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500">Phase IV</button>
+            </div>
+        </div>
+
+
+        <!-- Total Statistics -->
+        <div class="flex justify-between items-center mb-4 text-center">
+            <div class="flex-1 p-2 bg-blue-50 rounded-lg">
+                <span class="text-sm font-semibold text-gray-600">Total EUs:</span>
+                <span id="total-eus" class="text-xl font-bold text-blue-600">0</span>
+            </div>
+            <div class="flex-1 p-2 bg-blue-50 rounded-lg ml-2">
+                <span class="text-sm font-semibold text-gray-600">Total Demand (MW):</span>
+                <span id="total-demand" class="text-xl font-bold text-blue-600">0</span>
+            </div>
+        </div>
+
+        <!-- Island Group Breakdown -->
+        <div class="mt-4 p-4 bg-gray-50 rounded-lg shadow-inner">
+            <h2 class="text-lg font-bold text-gray-800 mb-2">Total EUs and Demand by Island Group</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                <div class="p-3 bg-red-100 rounded-lg shadow-sm">
+                    <h3 class="font-semibold text-red-700">Luzon</h3>
+                    <p class="text-sm text-red-600"><span id="luzon-eus" class="font-bold">0</span> EUs</p>
+                    <p class="text-sm text-red-600"><span id="luzon-demand" class="font-bold">0</span> MW</p>
+                </div>
+                <div class="p-3 bg-blue-100 rounded-lg shadow-sm">
+                    <h3 class="font-semibold text-blue-700">Visayas</h3>
+                    <p class="text-sm text-blue-600"><span id="visayas-eus" class="font-bold">0</span> EUs</p>
+                    <p class="text-sm text-blue-600"><span id="visayas-demand" class="font-bold">0</span> MW</p>
+                </div>
+                <div class="p-3 bg-yellow-100 rounded-lg shadow-sm">
+                    <h3 class="font-semibold text-yellow-700">Mindanao</h3>
+                    <p class="text-sm text-yellow-600"><span id="mindanao-eus" class="font-bold">0</span> EUs</p>
+                    <p class="text-sm text-yellow-600"><span id="mindanao-demand" class="font-bold">0</span> MW</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Map container -->
+        <div id="map" class="w-full"></div>
+
+        <!-- Legend and Instructions -->
+        <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+            <h2 class="text-xl font-semibold text-gray-800 mb-2">Legend</h2>
+            <div class="flex flex-col md:flex-row md:space-x-8 space-y-4 md:space-y-0">
+                <!-- Color Legend -->
+                <div id="legend-colors" class="flex-1">
+                    <!-- Content will be dynamically generated by JS -->
+                </div>
+                <!-- Phase Definitions -->
+                <div id="legend-definitions" class="flex-1">
+                    <!-- Content will be dynamically generated by JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize the map, centered on the Philippines
+            const map = L.map('map').setView([12.8797, 121.7740], 6);
+
+            // Add the tile layer (the map's background)
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // Define custom DivIcons for each program and island group
+            const icons = {
+                CREM: {
+                    Luzon: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #dc2626;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] }),
+                    Visayas: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #2563eb;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] }),
+                    Mindanao: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #facc15;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] })
+                },
+                GEOP: {
+                    Luzon: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #84cc16;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] }),
+                    Visayas: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #22c55e;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] }),
+                    Mindanao: L.divIcon({ className: 'marker-dot', html: '<div style="background-color: #15803d;"></div>', iconSize: [10, 10], iconAnchor: [5, 5] })
+                }
+            };
+            
+            // Consolidated data from the documents
+            const euData = [
+                // Luzon NSPs
+                {
+                    name: "NGCP (Luzon)", shortName: "NGCP (Luzon)", lat: 15.602, lng: 120.908, island: "Luzon",
+                    crem: { eus: 39, demand: 0, phase1_eus: 37, phase2_eus: 1, phase3_eus: 1 },
+                    captive: { phase1_eus: 17, phase1_demand: 164.44, phase2_eus: 1, phase2_demand: 1.09, phase3_eus: 6, phase3_demand: 2.88 },
+                    phaseIV: { eus: 9, demand: 311.16 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Albay Electric Cooperative, Inc.", shortName: "ALECO", lat: 13.200, lng: 123.700, island: "Luzon",
+                    crem: { eus: 7, demand: 0, phase1_eus: 4, phase2_eus: 1, phase3_eus: 2 },
+                    captive: { phase1_eus: 1, phase1_demand: 1.36, phase2_eus: 0, phase2_demand: 0, phase3_eus: 7, phase3_demand: 4.28 },
+                    phaseIV: { eus: 75, demand: 15.52 },
+                    geop: { eus: 3, demand: 0.57 }
+                },
+                {
+                    name: "Angeles Electric Corporation", shortName: "AEC", lat: 15.148, lng: 120.575, island: "Luzon",
+                    crem: { eus: 4, demand: 0, phase1_eus: 4, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 3, phase1_demand: 4.42, phase2_eus: 3, phase2_demand: 2.92, phase3_eus: 3, phase3_demand: 1.92 },
+                    phaseIV: { eus: 80, demand: 31.64 },
+                    geop: { eus: 3, demand: 1.25 }
+                },
+                {
+                    name: "Authority Freeport Area of Bataan", shortName: "AFAB", lat: 14.536, lng: 120.528, island: "Luzon",
+                    crem: { eus: 3, demand: 0, phase1_eus: 2, phase2_eus: 1, phase3_eus: 0 },
+                    captive: { phase1_eus: 5, phase1_demand: 6.86, phase2_eus: 5, phase2_demand: 4.16, phase3_eus: 3, phase3_demand: 1.83 },
+                    phaseIV: { eus: 37, demand: 8.51 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Batangas I Electric Cooperative, Inc.", shortName: "BATELEC I", lat: 13.883, lng: 120.983, island: "Luzon",
+                    crem: { eus: 8, demand: 0, phase1_eus: 5, phase2_eus: 2, phase3_eus: 1 },
+                    captive: { phase1_eus: 2, phase1_demand: 4.89, phase2_eus: 3, phase2_demand: 0.94, phase3_eus: 4, phase3_demand: 2.50 },
+                    phaseIV: { eus: 32, demand: 7.25 },
+                    geop: { eus: 2, demand: 0.91 }
+                },
+                {
+                    name: "Batangas II Electric Cooperative, Inc.", shortName: "BATELEC II", lat: 13.750, lng: 121.050, island: "Luzon",
+                    crem: { eus: 23, demand: 0, phase1_eus: 12, phase2_eus: 6, phase3_eus: 5 },
+                    captive: { phase1_eus: 4, phase1_demand: 2.60, phase2_eus: 6, phase2_demand: 3.30, phase3_eus: 10, phase3_demand: 4.96 },
+                    phaseIV: { eus: 119, demand: 32.45 },
+                    geop: { eus: 9, demand: 2.68 }
+                },
+                {
+                    name: "Benguet Electric Cooperative, Inc.", shortName: "BENECO", lat: 16.417, lng: 120.597, island: "Luzon",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 4.68, phase2_eus: 2, phase2_demand: 1.16, phase3_eus: 2, phase3_demand: 1.32},
+                    phaseIV: { eus: 56, demand: 11.09 },
+                    geop: { eus: 2, demand: 0.45 }
+                },
+                {
+                    name: "Cabanatuan Electric Corporation", shortName: "CELCOR", lat: 15.483, lng: 120.967, island: "Luzon",
+                    crem: { eus: 5, demand: 0, phase1_eus: 3, phase2_eus: 2, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 2, phase3_demand: 1.31 },
+                    phaseIV: { eus: 45, demand: 8.83 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Cagayan I Electric Cooperative, Inc.", shortName: "CAGELCO I", lat: 17.653, lng: 121.726, island: "Luzon",
+                    crem: { eus: 3, demand: 0, phase1_eus: 2, phase2_eus: 1, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 2.88, phase2_eus: 3, phase2_demand: 2.39, phase3_eus: 2, phase3_demand: 1.21 },
+                    phaseIV: { eus: 62, demand: 11.82 },
+                    geop: { eus: 1, demand: 0.23 }
+                },
+                {
+                    name: "Cagayan II Electric Cooperative, Inc.", shortName: "CAGELCO II", lat: 18.000, lng: 121.600, island: "Luzon",
+                    crem: { eus: 1, demand: 0, phase1_eus: 1, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 1.33, phase2_eus: 0, phase2_demand: 0, phase3_eus: 2, phase3_demand: 1.03 },
+                    phaseIV: { eus: 26, demand: 6.26 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Camarines Norte Electric Cooperative", shortName: "CANORECO", lat: 14.150, lng: 122.950, island: "Luzon",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 2, phase1_demand: 2.70, phase2_eus: 0, phase2_demand: 0, phase3_eus: 1, phase3_demand: 0.09},
+                    phaseIV: { eus: 15, demand: 3.52 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Camarines Sur II Electric Cooperative, Inc.", shortName: "CASURECO II", lat: 13.600, lng: 123.183, island: "Luzon",
+                    crem: { eus: 5, demand: 0, phase1_eus: 5, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 1.97, phase2_eus: 1, phase2_demand: 0.95, phase3_eus: 16, phase3_demand: 9.39 },
+                    phaseIV: { eus: 89, demand: 16.37 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Camarines Sur IV Electric Cooperative, Inc.", shortName: "CASURECO IV", lat: 13.42, lng: 123.41, island: "Luzon",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0 },
+                    phaseIV: { eus: 10, demand: 1.73 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Central Pangasinan Electric Cooperative, Inc.", shortName: "CENPELCO", lat: 15.833, lng: 120.333, island: "Luzon",
+                    crem: { eus: 1, demand: 0, phase1_eus: 1, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 1, phase2_demand: 0.88, phase3_eus: 2, phase3_demand: 0.81 },
+                    phaseIV: { eus: 76, demand: 14.47 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Clark Electric Distribution Corporation", shortName: "CEDC", lat: 15.183, lng: 120.550, island: "Luzon",
+                    crem: { eus: 31, demand: 0, phase1_eus: 21, phase2_eus: 7, phase3_eus: 3 },
+                    captive: { phase1_eus: 6, phase1_demand: 14.03, phase2_eus: 2, phase2_demand: 2.80, phase3_eus: 10, phase3_demand: 5.69 },
+                    phaseIV: { eus: 132, demand: 25.61 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Consort Land, Inc.", shortName: "CLI", lat: 14.700, lng: 120.800, island: "Luzon",
+                    crem: { eus: 2, demand: 0, phase1_eus: 1, phase2_eus: 0, phase3_eus: 1 },
+                    captive: { phase1_eus: 1, phase1_demand: 2.45, phase2_eus: 0, phase2_demand: 0, phase3_eus: 1, phase3_demand: 0.59 },
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Dagupan Electric Corporation", shortName: "DECORP", lat: 16.033, lng: 120.333, island: "Luzon",
+                    crem: { eus: 4, demand: 0, phase1_eus: 2, phase2_eus: 0, phase3_eus: 2 },
+                    captive: { phase1_eus: 3, phase1_demand: 5.89, phase2_eus: 1, phase2_demand: 0.61, phase3_eus: 4, phase3_demand: 65.20 },
+                    phaseIV: { eus: 90, demand: 15.04 },
+                    geop: { eus: 1, demand: 0.12 }
+                },
+                {
+                    name: "First Industrial Township Utilities, Inc.", shortName: "FITUI", lat: 14.150, lng: 121.167, island: "Luzon",
+                    crem: { eus: 3, demand: 0, phase1_eus: 1, phase2_eus: 0, phase3_eus: 2 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0 },
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "First Laguna Electric Cooperative, Inc.", shortName: "FLECO", lat: 14.283, lng: 121.417, island: "Luzon",
+                    crem: { eus: 1, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 1 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0 },
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Ilocos Norte Electric Cooperative, Inc.", shortName: "INEC", lat: 18.067, lng: 120.600, island: "Luzon",
+                    crem: { eus: 1, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 1 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 3, phase3_demand: 1.45 },
+                    phaseIV: { eus: 45, demand: 8.64 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Ilocos Sur Electric Cooperative, Inc.", shortName: "ISECO", lat: 17.433, lng: 120.483, island: "Luzon",
+                    crem: { eus: 3, demand: 0, phase1_eus: 1, phase2_eus: 2, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 2, phase3_demand: 1.41 },
+                    phaseIV: { eus: 26, demand: 5.01 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Isabela I Electric Cooperative, Inc.", shortName: "ISELCO I", lat: 16.833, lng: 121.750, island: "Luzon",
+                    crem: { eus: 1, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 1 },
+                    captive: { phase1_eus: 5, phase1_demand: 2.38, phase2_eus: 2, phase2_demand: 1.52, phase3_eus: 9, phase3_demand: 4.86 },
+                    phaseIV: { eus: 101, demand: 24.32 },
+                    geop: { eus: 1, demand: 0.10 }
+                },
+                {
+                    name: "Isabela II Electric Cooperative MSP", shortName: "ISELCO II", lat: 17.200, lng: 121.900, island: "Luzon",
+                    crem: { eus: 5, demand: 0, phase1_eus: 3, phase2_eus: 1, phase3_eus: 1 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 1, phase2_demand: 0.61, phase3_eus: 3, phase3_demand: 1.92 },
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "La Union Electric Company, Inc.", shortName: "LUECO", lat: 16.500, lng: 120.300, island: "Luzon",
+                    crem: { eus: 3, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 3 },
+                    captive: { phase1_eus: 3, phase1_demand: 4.09, phase2_eus: 0, phase2_demand: 0, phase3_eus: 3, phase3_demand: 1.84 },
+                    phaseIV: { eus: 36, demand: 7.14 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "La Union Electric Cooperative, Inc.", shortName: "LUELCO", lat: 16.633, lng: 120.367, island: "Luzon",
+                    crem: { eus: 1, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 1 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 1, phase2_demand: 0.78, phase3_eus: 3, phase3_demand: 1.68 },
+                    phaseIV: { eus: 31, demand: 5.70 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Lima Enerzone Corporation", shortName: "LEC", lat: 14.050, lng: 121.150, island: "Luzon",
+                    crem: { eus: 3, demand: 0, phase1_eus: 1, phase2_eus: 2, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 0.66, phase2_eus: 0, phase2_demand: 0, phase3_eus: 2, phase3_demand: 1.02 },
+                    phaseIV: { eus: 39, demand: 11.14 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Malvar Enerzone Corporation", shortName: "MEC", lat: 14.000, lng: 121.133, island: "Luzon",
+                    crem: { eus: 28, demand: 0, phase1_eus: 14, phase2_eus: 6, phase3_eus: 8 },
+                    captive: { phase1_eus: 1, phase1_demand: 4.15, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0 },
+                    phaseIV: { eus: 4, demand: 1.13 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Manila Electric Company", shortName: "MERALCO", lat: 14.599, lng: 120.984, island: "Luzon",
+                    crem: { eus: 1570, demand: 0, phase1_eus: 932, phase2_eus: 350, phase3_eus: 288 },
+                    captive: { phase1_eus: 101, phase1_demand: 276.89, phase2_eus: 91, phase2_demand: 77.69, phase3_eus: 516, phase3_demand: 249.31 },
+                    phaseIV: { eus: 7207, demand: 1481.36 },
+                    geop: { eus: 458, demand: 151.25 }
+                },
+                {
+                    name: "Nueva Ecija I Electric Cooperative, Inc.", shortName: "NEECO I", lat: 15.483, lng: 120.950, island: "Luzon",
+                    crem: { eus: 2, demand: 0, phase1_eus: 2, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 25.44, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0 },
+                    phaseIV: { eus: 34, demand: 7.42 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Nueva Ecija II Area 1 Electric Cooperative, Inc.", shortName: "NEECO II-A1", lat: 15.700, lng: 120.867, island: "Luzon",
+                    crem: { eus: 1, demand: 0, phase1_eus: 0, phase2_eus: 1, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 2.08, phase2_eus: 0, phase2_demand: 0, phase3_eus: 3, phase3_demand: 1.76 },
+                    phaseIV: { eus: 40, demand: 9.46 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Nueva Ecija II Electric Cooperative, Inc. Area 2", shortName: "NEECO II-A2", lat: 15.600, lng: 120.900, island: "Luzon",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 1.77, phase2_eus: 1, phase2_demand: 0.80, phase3_eus: 5, phase3_demand: 2.20},
+                    phaseIV: { eus: 66, demand: 14.25 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Nueva Vizcaya Electric Cooperative", shortName: "NUVELCO", lat: 16.500, lng: 121.150, island: "Luzon",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 6.70, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Occidental Mindoro Electric Cooperative, Inc.", shortName: "OMECO", lat: 13.000, lng: 120.800, island: "Luzon",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 2, phase1_demand: 0.76, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Olongapo Electricity Distribution Company, Inc.", shortName: "OEDC", lat: 14.833, lng: 120.283, island: "Luzon",
+                    crem: { eus: 2, demand: 0, phase1_eus: 2, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0 },
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Pampanga I Electric Cooperative, Inc.", shortName: "PELCO I", lat: 15.017, lng: 120.667, island: "Luzon",
+                    crem: { eus: 2, demand: 0, phase1_eus: 2, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 4, phase3_demand: 2.45 },
+                    phaseIV: { eus: 38, demand: 7.05 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Pampanga II Electric Cooperative, Inc.", shortName: "PELCO II", lat: 15.050, lng: 120.700, island: "Luzon",
+                    crem: { eus: 4, demand: 0, phase1_eus: 3, phase2_eus: 1, phase3_eus: 0 },
+                    captive: { phase1_eus: 2, phase1_demand: 1.80, phase2_eus: 2, phase2_demand: 1.81, phase3_eus: 2, phase3_demand: 1.03 },
+                    phaseIV: { eus: 82, demand: 15.60 },
+                    geop: { eus: 2, demand: 0.53 }
+                },
+                {
+                    name: "Pampanga III Electric Cooperative, Inc.", shortName: "PELCO III", lat: 15.100, lng: 120.733, island: "Luzon",
+                    crem: { eus: 4, demand: 0, phase1_eus: 2, phase2_eus: 1, phase3_eus: 1 },
+                    captive: { phase1_eus: 1, phase1_demand: 0.46, phase2_eus: 3, phase2_demand: 2.29, phase3_eus: 3, phase3_demand: 1.36 },
+                    phaseIV: { eus: 20, demand: 5.17 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Pangasinan I Electric Cooperative, Inc.", shortName: "PANELCO I", lat: 16.16, lng: 119.98, island: "Luzon",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 1, phase3_demand: 0.66 },
+                    phaseIV: { eus: 18, demand: 3.25 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Pangasinan III Electric Cooperative", shortName: "PANELCO III", lat: 15.900, lng: 120.400, island: "Luzon",
+                    crem: { eus: 2, demand: 0, phase1_eus: 0, phase2_eus: 1, phase3_eus: 1 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 1, phase2_demand: 0.77, phase3_eus: 3, phase3_demand: 1.80 },
+                    phaseIV: { eus: 68, demand: 14.15 },
+                    geop: { eus: 2, demand: 0.81 }
+                },
+                {
+                    name: "Peninsula Electric Cooperative, Inc.", shortName: "PENELCO", lat: 14.700, lng: 120.500, island: "Luzon",
+                    crem: { eus: 13, demand: 0, phase1_eus: 8, phase2_eus: 2, phase3_eus: 3 },
+                    captive: { phase1_eus: 2, phase1_demand: 3.78, phase2_eus: 4, phase2_demand: 3.28, phase3_eus: 16, phase3_demand: 9.48 },
+                    phaseIV: { eus: 126, demand: 25.94 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Quezon I Electric Cooperative, Inc.", shortName: "QUEZELCO I", lat: 14.000, lng: 121.600, island: "Luzon",
+                    crem: { eus: 10, demand: 0, phase1_eus: 6, phase2_eus: 1, phase3_eus: 3 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0 },
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "San Fernando Electric Light & Power Co., Inc.", shortName: "SFELAPCO", lat: 15.025, lng: 120.697, island: "Luzon",
+                    crem: { eus: 1, demand: 0, phase1_eus: 1, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 2, phase1_demand: 8.37, phase2_eus: 1, phase2_demand: 0.77, phase3_eus: 8, phase3_demand: 8.18 },
+                    phaseIV: { eus: 129, demand: 23.32 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "San Jose Electric Cooperative, Inc.", shortName: "SAJELCO", lat: 15.78, lng: 121.00, island: "Luzon",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 3, phase2_demand: 2.36, phase3_eus: 8, phase3_demand: 4.01 },
+                    phaseIV: { eus: 35, demand: 8.74 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Sorsogon II Electric Cooperative, Inc.", shortName: "SORECO II", lat: 12.900, lng: 123.900, island: "Luzon",
+                    crem: { eus: 20, demand: 0, phase1_eus: 15, phase2_eus: 4, phase3_eus: 1 },
+                    captive: { phase1_eus: 1, phase1_demand: 2.60, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0 },
+                    phaseIV: { eus: 13, demand: 2.56 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Subic Enerzone Corporation", shortName: "SEZ", lat: 14.800, lng: 120.300, island: "Luzon",
+                    crem: { eus: 1, demand: 0, phase1_eus: 1, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 4.15, phase2_eus: 1, phase2_demand: 0.63, phase3_eus: 3, phase3_demand: 1.37 },
+                    phaseIV: { eus: 32, demand: 7.99 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Tarlac Electric. Inc.", shortName: "TEI", lat: 15.467, lng: 120.597, island: "Luzon",
+                    crem: { eus: 24, demand: 0, phase1_eus: 17, phase2_eus: 3, phase3_eus: 4 },
+                    captive: { phase1_eus: 2, phase1_demand: 3.25, phase2_eus: 0, phase2_demand: 0, phase3_eus: 5, phase3_demand: 3.50 },
+                    phaseIV: { eus: 77, demand: 15.16 },
+                    geop: { eus: 1, demand: 0.25 }
+                },
+                {
+                    name: "Tarlac I Electric Cooperative, Inc.", shortName: "TARELCO I", lat: 15.500, lng: 120.600, island: "Luzon",
+                    crem: { eus: 15, demand: 0, phase1_eus: 8, phase2_eus: 3, phase3_eus: 4 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 1, phase2_demand: 0.11, phase3_eus: 0, phase3_demand: 0 },
+                    phaseIV: { eus: 45, demand: 9.76 },
+                    geop: { eus: 1, demand: 0.48 }
+                },
+                {
+                    name: "Tarlac II Electric Cooperative, Inc.", shortName: "TARELCO II", lat: 15.533, lng: 120.617, island: "Luzon",
+                    crem: { eus: 9, demand: 0, phase1_eus: 3, phase2_eus: 2, phase3_eus: 4 },
+                    captive: { phase1_eus: 1, phase1_demand: 1.25, phase2_eus: 2, phase2_demand: 1.59, phase3_eus: 2, phase3_demand: 1.38 },
+                    phaseIV: { eus: 62, demand: 12.51 },
+                    geop: { eus: 1, demand: 0.16 }
+                },
+                {
+                    name: "Zambales I Electric Cooperative, Inc.", shortName: "ZAMECO I", lat: 15.100, lng: 120.000, island: "Luzon",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 1, phase2_demand: 0.84, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 24, demand: 4.72 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Baguio City Economic Zone", shortName: "BCEZ", lat: 16.400, lng: 120.600, island: "Luzon",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 5.27, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Cavite Economic Zone", shortName: "CEZ", lat: 14.400, lng: 120.900, island: "Luzon",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 14, phase1_demand: 9.58, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Formosa Power Supply Corp.", shortName: "FPSC", lat: 14.650, lng: 120.500, island: "Luzon",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 20.24, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Cocochem Agri-Industrial Park", shortName: "CAIP", lat: 13.980, lng: 121.200, island: "Luzon",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 1, phase3_demand: 0.28},
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+
+                // Visayas NSPs
+                {
+                    name: "NGCP (Visayas)", shortName: "NGCP (Visayas)", lat: 11.250, lng: 124.966, island: "Visayas",
+                    crem: { eus: 9, demand: 0, phase1_eus: 9, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 2, phase1_demand: 65.23, phase2_eus: 1, phase2_demand: 0.91, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Aklan Electric Cooperative, Inc.", shortName: "AKELCO", lat: 11.750, lng: 122.383, island: "Visayas",
+                    crem: { eus: 3, demand: 0, phase1_eus: 2, phase2_eus: 1, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 1.04, phase2_eus: 2, phase2_demand: 0.95, phase3_eus: 3, phase3_demand: 1.76},
+                    phaseIV: { eus: 70, demand: 20.40 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Antique Electric Cooperative, Inc.", shortName: "ANTECO", lat: 11.200, lng: 122.050, island: "Visayas",
+                    crem: { eus: 1, demand: 0, phase1_eus: 1, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 8, demand: 1.71 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Balamban Enerzone Corporation", shortName: "BEZ", lat: 10.450, lng: 123.833, island: "Visayas",
+                    crem: { eus: 6, demand: 0, phase1_eus: 6, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 2, demand: 0.65 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Bohol I Electric Cooperative, Inc.", shortName: "BOHECO I", lat: 9.900, lng: 124.083, island: "Visayas",
+                    crem: { eus: 4, demand: 0, phase1_eus: 2, phase2_eus: 1, phase3_eus: 1 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 1, phase2_demand: 0.89, phase3_eus: 2, phase3_demand: 1.26},
+                    phaseIV: { eus: 35, demand: 6.45 },
+                    geop: { eus: 2, demand: 6.64 }
+                },
+                {
+                    name: "Bohol II Electric Cooperative, Inc.", shortName: "BOHECO II", lat: 9.800, lng: 124.100, island: "Visayas",
+                    crem: { eus: 2, demand: 0, phase1_eus: 0, phase2_eus: 1, phase3_eus: 1 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 1, phase3_demand: 0.50},
+                    phaseIV: { eus: 5, demand: 0.92 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Bohol Light Company, Inc.", shortName: "BLCI", lat: 9.650, lng: 123.850, island: "Visayas",
+                    crem: { eus: 3, demand: 0, phase1_eus: 2, phase2_eus: 1, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 1, phase3_demand: 0.48},
+                    phaseIV: { eus: 22, demand: 5.12 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Capiz Electric Cooperative, Inc.", shortName: "CAPELCO", lat: 11.583, lng: 122.750, island: "Visayas",
+                    crem: { eus: 2, demand: 0, phase1_eus: 2, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 1.74, phase2_eus: 1, phase2_demand: 0.97, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 6, demand: 1.75 },
+                    geop: { eus: 3, demand: 2.23 }
+                },
+                {
+                    name: "Cebu I Electric Cooperative, Inc.", shortName: "CEBECO I", lat: 10.300, lng: 123.833, island: "Visayas",
+                    crem: { eus: 4, demand: 0, phase1_eus: 4, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 7, demand: 2.71 }
+                },
+                {
+                    name: "Cebu II Electric Cooperative, Inc.", shortName: "CEBECO II", lat: 10.250, lng: 123.900, island: "Visayas",
+                    crem: { eus: 8, demand: 0, phase1_eus: 6, phase2_eus: 2, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 3, phase3_demand: 1.29},
+                    phaseIV: { eus: 14, demand: 3.08 },
+                    geop: { eus: 3, demand: 0.88 }
+                },
+                {
+                    name: "Cebu III Electric Cooperative, Inc.", shortName: "CEBECO III", lat: 10.350, lng: 123.890, island: "Visayas",
+                    crem: { eus: 1, demand: 0, phase1_eus: 1, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 1.49, phase2_eus: 0, phase2_demand: 0, phase3_eus: 1, phase3_demand: 0.75},
+                    phaseIV: { eus: 2, demand: 0.81 },
+                    geop: { eus: 5, demand: 2.00 }
+                },
+                {
+                    name: "Don Orestes Romualdez Electric Cooperative, Inc.", shortName: "DORELCO", lat: 11.000, lng: 125.000, island: "Visayas",
+                    crem: { eus: 1, demand: 0, phase1_eus: 1, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 18, demand: 3.00 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Iloilo I Electric Cooperative, Inc.", shortName: "ILECO I", lat: 10.700, lng: 122.567, island: "Visayas",
+                    crem: { eus: 4, demand: 0, phase1_eus: 2, phase2_eus: 1, phase3_eus: 1 },
+                    captive: { phase1_eus: 2, phase1_demand: 1.16, phase2_eus: 2, phase2_demand: 1.56, phase3_eus: 2, phase3_demand: 1.33},
+                    phaseIV: { eus: 49, demand: 13.02 },
+                    geop: { eus: 3, demand: 0.81 }
+                },
+                {
+                    name: "Iloilo II Electric Cooperative, Inc.", shortName: "ILECO II", lat: 10.850, lng: 122.667, island: "Visayas",
+                    crem: { eus: 1, demand: 0, phase1_eus: 0, phase2_eus: 1, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 1, phase3_demand: 0.50},
+                    phaseIV: { eus: 32, demand: 6.98 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Iloilo III Electric Cooperative, Inc.", shortName: "ILECO III", lat: 11.08, lng: 122.71, island: "Visayas",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 1, phase3_demand: 0.50},
+                    phaseIV: { eus: 17, demand: 3.12 },
+                    geop: { eus: 2, demand: 2.21 }
+                },
+                {
+                    name: "Leyte II Electric Cooperative, Inc.", shortName: "LEYECO II", lat: 11.000, lng: 124.800, island: "Visayas",
+                    crem: { eus: 4, demand: 0, phase1_eus: 2, phase2_eus: 2, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 1.16, phase2_eus: 1, phase2_demand: 0.91, phase3_eus: 4, phase3_demand: 2.46},
+                    phaseIV: { eus: 57, demand: 11.81 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Leyte III Electric Cooperative, Inc.", shortName: "LEYECO III", lat: 10.75, lng: 125.01, island: "Visayas",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 1, phase3_demand: 0.63},
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Leyte IV Electric Cooperative, Inc.", shortName: "LEYECO IV", lat: 11.00, lng: 124.61, island: "Visayas",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 1.16, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 14, demand: 3.09 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Leyte V Electric Cooperative, Inc.", shortName: "LEYECO V", lat: 10.883, lng: 124.933, island: "Visayas",
+                    crem: { eus: 3, demand: 0, phase1_eus: 3, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 1.11, phase2_eus: 2, phase2_demand: 1.54, phase3_eus: 2, phase3_demand: 1.53},
+                    phaseIV: { eus: 38, demand: 8.31 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Mactan Electric Company, Inc.", shortName: "MECO", lat: 10.317, lng: 123.950, island: "Visayas",
+                    crem: { eus: 15, demand: 0, phase1_eus: 11, phase2_eus: 3, phase3_eus: 1 },
+                    captive: { phase1_eus: 4, phase1_demand: 4.76, phase2_eus: 6, phase2_demand: 5.05, phase3_eus: 10, phase3_demand: 6.04},
+                    phaseIV: { eus: 97, demand: 20.72 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Mactan Enerzone Corporation", shortName: "MEZ", lat: 10.300, lng: 123.967, island: "Visayas",
+                    crem: { eus: 11, demand: 0, phase1_eus: 7, phase2_eus: 0, phase3_eus: 4 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 4, demand: 1.59 }
+                },
+                {
+                    name: "MORE Electric and Power Corporation", shortName: "MORE POWER", lat: 10.700, lng: 122.567, island: "Visayas",
+                    crem: { eus: 17, demand: 0, phase1_eus: 9, phase2_eus: 3, phase3_eus: 5 },
+                    captive: { phase1_eus: 5, phase1_demand: 5.76, phase2_eus: 5, phase2_demand: 4.85, phase3_eus: 9, phase3_demand: 5.19},
+                    phaseIV: { eus: 129, demand: 26.54 },
+                    geop: { eus: 4, demand: 1.27 }
+                },
+                {
+                    name: "Negros Electric and Power Corporation", shortName: "NEPC", lat: 10.667, lng: 122.950, island: "Visayas",
+                    crem: { eus: 10, demand: 0, phase1_eus: 6, phase2_eus: 3, phase3_eus: 1 },
+                    captive: { phase1_eus: 5, phase1_demand: 7.89, phase2_eus: 2, phase2_demand: 1.39, phase3_eus: 10, phase3_demand: 5.97},
+                    phaseIV: { eus: 221, demand: 44.86 },
+                    geop: { eus: 5, demand: 1.92 }
+                },
+                {
+                    name: "Negros Occidental Electric Cooperative", shortName: "NOCECO", lat: 10.850, lng: 123.000, island: "Visayas",
+                    crem: { eus: 1, demand: 0, phase1_eus: 1, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 0.66, phase2_eus: 0, phase2_demand: 0, phase3_eus: 2, phase3_demand: 0.95},
+                    phaseIV: { eus: 42, demand: 6.79 },
+                    geop: { eus: 1, demand: 0.97 }
+                },
+                {
+                    name: "Negros Oriental I Electric Cooperative, Inc.", shortName: "NORECO I", lat: 9.75, lng: 123.18, island: "Visayas",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 1, phase2_demand: 1.04, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 3, demand: 0.34 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Negros Oriental II Electric Cooperative, Inc.", shortName: "NORECO II", lat: 9.300, lng: 123.300, island: "Visayas",
+                    crem: { eus: 4, demand: 0, phase1_eus: 3, phase2_eus: 0, phase3_eus: 1 },
+                    captive: { phase1_eus: 1, phase1_demand: 1.21, phase2_eus: 0, phase2_demand: 0, phase3_eus: 4, phase3_demand: 2.30},
+                    phaseIV: { eus: 46, demand: 10.12 },
+                    geop: { eus: 1, demand: 0.15 }
+                },
+                {
+                    name: "Northern Negros Electric Cooperative, Inc.", shortName: "NONECO", lat: 10.883, lng: 123.050, island: "Visayas",
+                    crem: { eus: 2, demand: 0, phase1_eus: 0, phase2_eus: 1, phase3_eus: 1 },
+                    captive: { phase1_eus: 1, phase1_demand: 1.41, phase2_eus: 1, phase2_demand: 1.12, phase3_eus: 4, phase3_demand: 2.36},
+                    phaseIV: { eus: 17, demand: 3.82 },
+                    geop: { eus: 1, demand: 0.09 }
+                },
+                {
+                    name: "Northern Samar Electric Cooperative, Inc.", shortName: "NORSAMELCO", lat: 12.500, lng: 124.700, island: "Visayas",
+                    crem: { eus: 1, demand: 0, phase1_eus: 1, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 1, phase2_demand: 0.09, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Samar I Electric Cooperative, Inc.", shortName: "SAMELCO I", lat: 11.900, lng: 124.800, island: "Visayas",
+                    crem: { eus: 2, demand: 0, phase1_eus: 2, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 2, demand: 0.25 }
+                },
+                {
+                    name: "Visayan Electric Company, Inc.", shortName: "VECO", lat: 10.300, lng: 123.900, island: "Visayas",
+                    crem: { eus: 151, demand: 0, phase1_eus: 82, phase2_eus: 31, phase3_eus: 38 },
+                    captive: { phase1_eus: 11, phase1_demand: 19.84, phase2_eus: 8, phase2_demand: 6.99, phase3_eus: 41, phase3_demand: 23.52},
+                    phaseIV: { eus: 585, demand: 121.94 },
+                    geop: { eus: 51, demand: 26.00 }
+                },
+                {
+                    name: "Mactan Ecozone II", shortName: "MEZ II", lat: 10.317, lng: 123.970, island: "Visayas",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 2, phase3_demand: 1.12},
+                    phaseIV: { eus: 28, demand: 5.94 },
+                    geop: { eus: 0, demand: 0 }
+                },
+
+                // Mindanao NSPs
+                {
+                    name: "NGCP (Mindanao)", shortName: "NGCP (Mindanao)", lat: 7.067, lng: 125.617, island: "Mindanao",
+                    crem: { eus: 1, demand: 0, phase1_eus: 1, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 5, phase1_demand: 30.51, phase2_eus: 0, phase2_demand: 0, phase3_eus: 1, phase3_demand: 0.58},
+                    phaseIV: { eus: 2, demand: 0.56 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Agusan del Norte Electric Cooperative, Inc.", shortName: "ANECO", lat: 8.94, lng: 125.54, island: "Mindanao",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 6, phase1_demand: 10.07, phase2_eus: 3, phase2_demand: 1.65, phase3_eus: 3, phase3_demand: 1.69},
+                    phaseIV: { eus: 76, demand: 29.11 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Agusan del Sur Electric Cooperative, Inc.", shortName: "ASELCO", lat: 8.700, lng: 125.800, island: "Mindanao",
+                    crem: { eus: 2, demand: 0, phase1_eus: 2, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 1, phase2_demand: 0.96, phase3_eus: 2, phase3_demand: 1.24},
+                    phaseIV: { eus: 30, demand: 0.01 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                 {
+                    name: "Bukidnon II Electric Cooperative, Inc.", shortName: "BUSECO", lat: 8.15, lng: 125.12, island: "Mindanao",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 3, phase1_demand: 7.96, phase2_eus: 3, phase2_demand: 1.58, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 31, demand: 7.63 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Cagayan Electric Power & Light Company, Inc.", shortName: "CEPALCO", lat: 8.472, lng: 124.646, island: "Mindanao",
+                    crem: { eus: 28, demand: 0, phase1_eus: 16, phase2_eus: 1, phase3_eus: 11 },
+                    captive: { phase1_eus: 13, phase1_demand: 155.61, phase2_eus: 5, phase2_demand: 4.37, phase3_eus: 9, phase3_demand: 5.38},
+                    phaseIV: { eus: 161, demand: 33.98 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Cotabato Electric Cooperative, Inc.", shortName: "COTELCO", lat: 7.19, lng: 124.53, island: "Mindanao",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 1.39, phase2_eus: 1, phase2_demand: 0.89, phase3_eus: 4, phase3_demand: 2.68},
+                    phaseIV: { eus: 29, demand: 5.53 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Cotabato Light and Power Company", shortName: "CLPC", lat: 7.22, lng: 124.25, island: "Mindanao",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 3, phase1_demand: 3.99, phase2_eus: 1, phase2_demand: 0.83, phase3_eus: 1, phase3_demand: 0.60},
+                    phaseIV: { eus: 19, demand: 3.79 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Davao del Sur Electric Cooperative Inc.", shortName: "DASURECO", lat: 7.000, lng: 125.400, island: "Mindanao",
+                    crem: { eus: 6, demand: 0, phase1_eus: 6, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 4, phase1_demand: 20.47, phase2_eus: 4, phase2_demand: 2.48, phase3_eus: 4, phase3_demand: 2.31},
+                    phaseIV: { eus: 62, demand: 10.83 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Davao Light Power and Company", shortName: "DLPC", lat: 7.067, lng: 125.617, island: "Mindanao",
+                    crem: { eus: 4, demand: 0, phase1_eus: 2, phase2_eus: 1, phase3_eus: 1 },
+                    captive: { phase1_eus: 43, phase1_demand: 105.69, phase2_eus: 17, phase2_demand: 11.06, phase3_eus: 53, phase3_demand: 30.62},
+                    phaseIV: { eus: 514, demand: 105.33 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Davao Oriental Electric Cooperative", shortName: "DORECO", lat: 7.08, lng: 126.15, island: "Mindanao",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 1, phase3_demand: 0.56},
+                    phaseIV: { eus: 15, demand: 3.18 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "First Bukidnon Electric Cooperative, Inc.", shortName: "FIBECO", lat: 7.76, lng: 125.00, island: "Mindanao",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 2, phase1_demand: 3.62, phase2_eus: 0, phase2_demand: 0, phase3_eus: 3, phase3_demand: 2.00},
+                    phaseIV: { eus: 1, demand: 0.31 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Iligan Light & Power, Inc.", shortName: "ILPI", lat: 8.22, lng: 124.24, island: "Mindanao",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 7, phase1_demand: 31.76, phase2_eus: 0, phase2_demand: 0, phase3_eus: 1, phase3_demand: 0.58},
+                    phaseIV: { eus: 33, demand: 6.04 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Lanao del Norte Electric Cooperative, Inc.", shortName: "LANECO", lat: 8.05, lng: 123.79, island: "Mindanao",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 0.10, phase2_eus: 0, phase2_demand: 0, phase3_eus: 1, phase3_demand: 0.05},
+                    phaseIV: { eus: 19, demand: 3.55 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Misamis Occidental II Electric Cooperative, Inc.", shortName: "MOELCI II", lat: 8.14, lng: 123.84, island: "Mindanao",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 2, phase1_demand: 2.23, phase2_eus: 1, phase2_demand: 0.78, phase3_eus: 2, phase3_demand: 1.05},
+                    phaseIV: { eus: 29, demand: 5.46 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Misamis Oriental-1 Rural Electric Service Cooperative, Inc.", shortName: "MORESCO-1", lat: 8.490, lng: 124.640, island: "Mindanao",
+                    crem: { eus: 2, demand: 0, phase1_eus: 2, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 4, phase1_demand: 0.55, phase2_eus: 0, phase2_demand: 0, phase3_eus: 3, phase3_demand: 0.15},
+                    phaseIV: { eus: 33, demand: 6.71 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Misamis Oriental II Electric Cooperative, Inc.", shortName: "MORESCO II", lat: 8.82, lng: 125.10, island: "Mindanao",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 5, phase1_demand: 8.81, phase2_eus: 0, phase2_demand: 0, phase3_eus: 2, phase3_demand: 1.20},
+                    phaseIV: { eus: 21, demand: 3.04 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Northern Davao Electric Cooperative, Inc.", shortName: "NORDECO", lat: 7.400, lng: 125.800, island: "Mindanao",
+                    crem: { eus: 1, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 1 },
+                    captive: { phase1_eus: 7, phase1_demand: 10.62, phase2_eus: 0, phase2_demand: 0, phase3_eus: 6, phase3_demand: 3.55},
+                    phaseIV: { eus: 74, demand: 14.56 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                 {
+                    name: "South Cotabato I Electric Cooperative, Inc.", shortName: "SOCOTECO I", lat: 6.50, lng: 124.85, island: "Mindanao",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 5, phase1_demand: 8.31, phase2_eus: 0, phase2_demand: 0, phase3_eus: 3, phase3_demand: 1.76},
+                    phaseIV: { eus: 67, demand: 12.26 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "South Cotabato II Electric Cooperative, Inc.", shortName: "SOCOTECO II", lat: 6.133, lng: 125.000, island: "Mindanao",
+                    crem: { eus: 1, demand: 0, phase1_eus: 1, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 0, phase3_demand: 0},
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Surigao del Norte Electric Cooperative, Inc.", shortName: "SURNECO", lat: 9.78, lng: 125.49, island: "Mindanao",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 4.06, phase2_eus: 2, phase2_demand: 1.95, phase3_eus: 1, phase3_demand: 0.72},
+                    phaseIV: { eus: 27, demand: 5.79 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Surigao del Sur I Electric Cooperative, Inc.", shortName: "SURSECO I", lat: 8.78, lng: 126.16, island: "Mindanao",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 1, phase3_demand: 0.86},
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Surigao del Sur II Electric Cooperative, Inc.", shortName: "SURSECO II", lat: 8.25, lng: 126.33, island: "Mindanao",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 0, phase1_demand: 0, phase2_eus: 0, phase2_demand: 0, phase3_eus: 2, phase3_demand: 0.63},
+                    phaseIV: { eus: 12, demand: 2.51 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Zamboanga del Norte Electric Cooperative, Inc.", shortName: "ZANECO", lat: 8.583, lng: 123.400, island: "Mindanao",
+                    crem: { eus: 1, demand: 0, phase1_eus: 1, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 1, phase1_demand: 1.32, phase2_eus: 1, phase2_demand: 0.88, phase3_eus: 2, phase3_demand: 1.13},
+                    phaseIV: { eus: 0, demand: 0 },
+                    geop: { eus: 0, demand: 0 }
+                },
+                {
+                    name: "Zamboanga City Electric Cooperative, Inc.", shortName: "ZAMCELCO", lat: 6.92, lng: 122.07, island: "Mindanao",
+                    crem: { eus: 0, demand: 0, phase1_eus: 0, phase2_eus: 0, phase3_eus: 0 },
+                    captive: { phase1_eus: 7, phase1_demand: 13.91, phase2_eus: 3, phase2_demand: 1.67, phase3_eus: 14, phase3_demand: 8.25},
+                    phaseIV: { eus: 141, demand: 55.55 },
+                    geop: { eus: 0, demand: 0 }
+                }
+            ];
+
+            let markers = [];
+            const nspSelect = document.getElementById('nsp-select');
+            const programButtons = document.getElementById('program-buttons');
+            const filterButtons = document.getElementById('filter-buttons');
+            const totalEUsSpan = document.getElementById('total-eus');
+            const totalDemandSpan = document.getElementById('total-demand');
+            const backButton = document.getElementById('back-button');
+            const legendColors = document.getElementById('legend-colors');
+            const legendDefinitions = document.getElementById('legend-definitions');
+            
+            // Populate the NSP dropdown
+            euData.sort((a, b) => a.name.localeCompare(b.name)).forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.name;
+                option.textContent = item.name;
+                nspSelect.appendChild(option);
+            });
+
+            // Function to clear all existing markers and layers from the map
+            function clearLayers() {
+                markers.forEach(marker => map.removeLayer(marker));
+                markers = [];
+            }
+            
+            // Function to create a marker and its popup
+            function createMarker(item, program) {
+                let popupContent = '';
+                if (program === 'CREM') {
+                    const crem_total_eus = (item.crem.phase1_eus || 0) + (item.crem.phase2_eus || 0) + (item.crem.phase3_eus || 0);
+                    const captive_total_eus = (item.captive.phase1_eus || 0) + (item.captive.phase2_eus || 0) + (item.captive.phase3_eus || 0);
+                    const captive_total_demand = (item.captive.phase1_demand || 0) + (item.captive.phase2_demand || 0) + (item.captive.phase3_demand || 0);
+                    const phaseIV_eus = item.phaseIV.eus || 0;
+                    const phaseIV_demand = item.phaseIV.demand || 0;
+                    popupContent = `
+                        <div style="font-size: 0.75rem;">
+                            <b>${item.name} (${item.shortName})</b>
+                            <hr class="my-1 border-gray-300">
+                            <p class="font-bold text-gray-700 popup-section-title" onclick="toggleDetails(this)">CREM (${crem_total_eus} EUs)</p>
+                            <div class="popup-details">
+                                <p>Phase I EUs: ${item.crem.phase1_eus}</p>
+                                <p>Phase II EUs: ${item.crem.phase2_eus}</p>
+                                <p>Phase III EUs: ${item.crem.phase3_eus}</p>
+                            </div>
+                            <hr class="my-1 border-gray-300">
+                            <p class="font-bold text-gray-700 popup-section-title" onclick="toggleDetails(this)">Captive (${captive_total_eus} EUs)</p>
+                            <div class="popup-details">
+                                <p>Demand: ${captive_total_demand.toLocaleString()} MW</p>
+                                <p>Phase I EUs: ${item.captive.phase1_eus}</p>
+                                <p>Phase I Demand: ${item.captive.phase1_demand} MW</p>
+                                <p>Phase II EUs: ${item.captive.phase2_eus}</p>
+                                <p>Phase II Demand: ${item.captive.phase2_demand} MW</p>
+                                <p>Phase III EUs: ${item.captive.phase3_eus}</p>
+                                <p>Phase III Demand: ${item.captive.phase3_demand} MW</p>
+                            </div>
+                            <hr class="my-1 border-gray-300">
+                            <p class="font-bold text-gray-700 popup-section-title" onclick="toggleDetails(this)">Phase IV (${phaseIV_eus} EUs)</p>
+                            <div class="popup-details">
+                                <p>Demand: ${phaseIV_demand.toLocaleString()} MW</p>
+                            </div>
+                        </div>`;
+                } else { // GEOP
+                     popupContent = `
+                        <div style="font-size: 0.75rem;">
+                            <b>${item.name} (${item.shortName})</b>
+                            <hr class="my-1 border-gray-300">
+                            <p class="font-bold text-gray-700">GEOP</p>
+                            <p>EUs: ${item.geop.eus.toLocaleString()}</p>
+                            <p>Demand: ${item.geop.demand.toLocaleString()} MW</p>
+                        </div>`;
+                }
+
+                const marker = L.marker([item.lat, item.lng], { icon: icons[program][item.island] })
+                    .bindPopup(popupContent);
+                markers.push(marker);
+                return marker;
+            }
+
+            // Function to render markers based on filters
+            function renderMarkers(filteredData, program) {
+                clearLayers();
+                filteredData.forEach(item => {
+                    const marker = createMarker(item, program);
+                    marker.addTo(map);
+                });
+            }
+            
+            // Function to update the total statistics based on the active filter
+            function updateTotals(data, program) {
+                const activePhase = filterButtons.querySelector('.active').dataset.phase;
+                let totalEUs = 0;
+                let totalDemand = 0;
+
+                data.forEach(item => {
+                    if (program === 'CREM') {
+                        if (activePhase === 'All') {
+                            totalEUs += (item.crem.eus || 0) + (item.captive.phase1_eus || 0) + (item.captive.phase2_eus || 0) + (item.captive.phase3_eus || 0) + (item.phaseIV.eus || 0);
+                            totalDemand += (item.crem.demand || 0) + (item.captive.phase1_demand || 0) + (item.captive.phase2_demand || 0) + (item.captive.phase3_demand || 0) + (item.phaseIV.demand || 0);
+                        } else if (activePhase === '1') {
+                            totalEUs += (item.crem.phase1_eus || 0) + (item.captive.phase1_eus || 0);
+                            totalDemand += (item.captive.phase1_demand || 0);
+                        } else if (activePhase === '2') {
+                            totalEUs += (item.crem.phase2_eus || 0) + (item.captive.phase2_eus || 0);
+                            totalDemand += (item.captive.phase2_demand || 0);
+                        } else if (activePhase === '3') {
+                            totalEUs += (item.crem.phase3_eus || 0) + (item.captive.phase3_eus || 0);
+                            totalDemand += (item.captive.phase3_demand || 0);
+                        } else if (activePhase === '4') {
+                            totalEUs += (item.phaseIV.eus || 0);
+                            totalDemand += (item.phaseIV.demand || 0);
+                        }
+                    } else { // GEOP
+                        totalEUs += item.geop.eus || 0;
+                        totalDemand += item.geop.demand || 0;
+                    }
+                });
+
+                totalEUsSpan.textContent = totalEUs.toLocaleString();
+                totalDemandSpan.textContent = totalDemand.toFixed(2).toLocaleString();
+            }
+
+            // New function to calculate and update the island group breakdown
+            function updateIslandBreakdown(program) {
+                const activePhase = filterButtons.querySelector('.active').dataset.phase;
+
+                let luzonEUs = 0, luzonDemand = 0;
+                let visayasEUs = 0, visayasDemand = 0;
+                let mindanaoEUs = 0, mindanaoDemand = 0;
+
+                euData.forEach(item => {
+                    let itemEUs = 0;
+                    let itemDemand = 0;
+
+                    if (program === 'CREM') {
+                        if (activePhase === 'All') {
+                            itemEUs = (item.crem.eus || 0) + (item.captive.phase1_eus || 0) + (item.captive.phase2_eus || 0) + (item.captive.phase3_eus || 0) + (item.phaseIV.eus || 0);
+                            itemDemand = (item.crem.demand || 0) + (item.captive.phase1_demand || 0) + (item.captive.phase2_demand || 0) + (item.captive.phase3_demand || 0) + (item.phaseIV.demand || 0);
+                        } else if (activePhase === '1') {
+                            itemEUs = (item.crem.phase1_eus || 0) + (item.captive.phase1_eus || 0);
+                            itemDemand = (item.captive.phase1_demand || 0);
+                        } else if (activePhase === '2') {
+                            itemEUs = (item.crem.phase2_eus || 0) + (item.captive.phase2_eus || 0);
+                            itemDemand = (item.captive.phase2_demand || 0);
+                        } else if (activePhase === '3') {
+                            itemEUs = (item.crem.phase3_eus || 0) + (item.captive.phase3_eus || 0);
+                            itemDemand = (item.captive.phase3_demand || 0);
+                        } else if (activePhase === '4') {
+                            itemEUs = item.phaseIV.eus || 0;
+                            itemDemand = item.phaseIV.demand || 0;
+                        }
+                    } else { // GEOP
+                        itemEUs = item.geop.eus || 0;
+                        itemDemand = item.geop.demand || 0;
+                    }
+
+                    if (item.island === 'Luzon') {
+                        luzonEUs += itemEUs;
+                        luzonDemand += itemDemand;
+                    } else if (item.island === 'Visayas') {
+                        visayasEUs += itemEUs;
+                        visayasDemand += itemDemand;
+                    } else if (item.island === 'Mindanao') {
+                        mindanaoEUs += itemEUs;
+                        mindanaoDemand += itemDemand;
+                    }
+                });
+
+                document.getElementById('luzon-eus').textContent = Math.round(luzonEUs).toLocaleString();
+                document.getElementById('luzon-demand').textContent = luzonDemand.toFixed(2).toLocaleString();
+                document.getElementById('visayas-eus').textContent = Math.round(visayasEUs).toLocaleString();
+                document.getElementById('visayas-demand').textContent = visayasDemand.toFixed(2).toLocaleString();
+                document.getElementById('mindanao-eus').textContent = Math.round(mindanaoEUs).toLocaleString();
+                document.getElementById('mindanao-demand').textContent = mindanaoDemand.toFixed(2).toLocaleString();
+            }
+            
+            // Function to update the legend
+            function updateLegend(program) {
+                if (program === 'CREM') {
+                    legendColors.innerHTML = `
+                        <h3 class="font-semibold text-gray-700 mb-2">Marker Colors:</h3>
+                        <ul class="list-disc list-inside text-gray-700">
+                            <li class="flex items-center"><span class="inline-block w-5 h-5 rounded-full bg-red-600 mr-2 border-2 border-white"></span> Luzon</li>
+                            <li class="flex items-center mt-1"><span class="inline-block w-5 h-5 rounded-full bg-blue-600 mr-2 border-2 border-white"></span> Visayas</li>
+                            <li class="flex items-center mt-1"><span class="inline-block w-5 h-5 rounded-full bg-yellow-400 mr-2 border-2 border-white"></span> Mindanao</li>
+                        </ul>`;
+                    legendDefinitions.innerHTML = `
+                        <h3 class="font-semibold text-gray-700 mb-2">Phase Definitions:</h3>
+                        <ul class="list-disc list-inside text-gray-700">
+                            <li><strong>Phase I:</strong> 1MW & above</li>
+                            <li><strong>Phase II:</strong> 750kW-999kW</li>
+                            <li><strong>Phase III:</strong> 500kW-749kW</li>
+                            <li><strong>Phase IV:</strong> 100kW-499kW</li>
+                        </ul>`;
+                } else { // GEOP
+                    legendColors.innerHTML = `
+                        <h3 class="font-semibold text-gray-700 mb-2">Marker Colors (GEOP):</h3>
+                        <ul class="list-disc list-inside text-gray-700">
+                            <li class="flex items-center"><span class="inline-block w-5 h-5 rounded-full mr-2 border-2 border-white" style="background-color: #84cc16;"></span> Luzon</li>
+                            <li class="flex items-center mt-1"><span class="inline-block w-5 h-5 rounded-full mr-2 border-2 border-white" style="background-color: #22c55e;"></span> Visayas</li>
+                            <li class="flex items-center mt-1"><span class="inline-block w-5 h-5 rounded-full mr-2 border-2 border-white" style="background-color: #15803d;"></span> Mindanao</li>
+                        </ul>`;
+                    legendDefinitions.innerHTML = `
+                        <h3 class="font-semibold text-gray-700 mb-2">Program Definition:</h3>
+                        <p class="text-gray-700">The Green Energy Option Program (GEOP) is a mechanism that empowers consumers to source their electricity supply from renewable energy resources.</p>`;
+                }
+            }
+
+            // Function to filter data based on search and other filters
+            function applyFilters() {
+                const selectedNspName = nspSelect.value;
+                const selectedProgram = programButtons.querySelector('.active').dataset.program;
+                const activePhase = filterButtons.querySelector('.active').dataset.phase;
+                
+                const filteredData = euData.filter(item => {
+                    const matchesNSP = selectedNspName === 'All' || item.name === selectedNspName;
+                    let matchesProgram = false;
+
+                    if (selectedProgram === 'CREM') {
+                        matchesProgram = activePhase === 'All' 
+                            || (activePhase === '1' && (item.crem.phase1_eus > 0 || item.captive.phase1_eus > 0))
+                            || (activePhase === '2' && (item.crem.phase2_eus > 0 || item.captive.phase2_eus > 0))
+                            || (activePhase === '3' && (item.crem.phase3_eus > 0 || item.captive.phase3_eus > 0))
+                            || (activePhase === '4' && (item.phaseIV.eus > 0));
+                    } else { // GEOP
+                        matchesProgram = item.geop.eus > 0;
+                    }
+                    
+                    return matchesNSP && matchesProgram;
+                });
+                
+                renderMarkers(filteredData, selectedProgram);
+                updateTotals(filteredData, selectedProgram);
+                updateIslandBreakdown(selectedProgram);
+                updateLegend(selectedProgram);
+
+                if (selectedNspName !== 'All' || (selectedProgram === 'CREM' && activePhase !== 'All')) {
+                    backButton.classList.remove('hidden');
+                } else {
+                    backButton.classList.add('hidden');
+                }
+            }
+
+            // Event listener for NSP dropdown
+            nspSelect.addEventListener('change', () => {
+                applyFilters();
+                const selectedNSP = euData.find(item => item.name === nspSelect.value);
+                if (selectedNSP) {
+                    map.flyTo([selectedNSP.lat, selectedNSP.lng], 10);
+                    const markerToHighlight = markers.find(m => m.getLatLng().lat === selectedNSP.lat && m.getLatLng().lng === selectedNSP.lng);
+                    if (markerToHighlight) {
+                        markerToHighlight.openPopup();
+                        const iconElement = markerToHighlight._icon;
+                        if (iconElement) {
+                             iconElement.classList.add('highlight');
+                             setTimeout(() => {
+                                 iconElement.classList.remove('highlight');
+                             }, 3000);
+                        }
+                    }
+                } else {
+                    map.setView([12.8797, 121.7740], 6);
+                }
+            });
+            
+            // Event listener for program buttons
+            programButtons.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    programButtons.querySelectorAll('button').forEach(btn => btn.classList.remove('active', 'bg-blue-600', 'bg-green-600'));
+                    programButtons.querySelectorAll('button').forEach(btn => btn.classList.add('bg-gray-500'));
+                    e.target.classList.add('active');
+                    e.target.classList.remove('bg-gray-500');
+                    if(e.target.dataset.program === 'CREM') {
+                        e.target.classList.add('bg-blue-600');
+                        filterButtons.style.display = 'flex';
+                    } else {
+                        e.target.classList.add('bg-green-600');
+                        filterButtons.style.display = 'none';
+                    }
+                    applyFilters();
+                }
+            });
+
+
+            // Event listener for filter buttons
+            filterButtons.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    filterButtons.querySelectorAll('button').forEach(btn => btn.classList.remove('active', 'bg-blue-600', 'hover:bg-blue-700'));
+                    filterButtons.querySelectorAll('button').forEach(btn => btn.classList.add('bg-gray-500', 'hover:bg-gray-600'));
+                    e.target.classList.add('active', 'bg-blue-600', 'hover:bg-blue-700');
+                    e.target.classList.remove('bg-gray-500', 'hover:bg-gray-600');
+                    applyFilters();
+                }
+            });
+
+            // Event listener for "Back to All" button
+            backButton.addEventListener('click', () => {
+                const allButton = filterButtons.querySelector('[data-phase="All"]');
+                if(allButton) allButton.click();
+                
+                const cremButton = programButtons.querySelector('[data-program="CREM"]');
+                if(cremButton) cremButton.click();
+
+                nspSelect.value = 'All';
+                backButton.classList.add('hidden');
+                map.setView([12.8797, 121.7740], 6);
+                applyFilters();
+            });
+            
+            // Initial render
+            applyFilters();
+
+            // Function to toggle popup details visibility
+            window.toggleDetails = (el) => {
+                const details = el.nextElementSibling;
+                const isExpanded = details.style.display === 'block';
+                
+                // Collapse all other sections in the same popup
+                const allDetails = el.closest('.leaflet-popup-content').querySelectorAll('.popup-details');
+                allDetails.forEach(d => d.style.display = 'none');
+                
+                const allTitles = el.closest('.leaflet-popup-content').querySelectorAll('.popup-section-title');
+                allTitles.forEach(t => t.style.textDecoration = 'underline');
+                
+                // Now, toggle the selected section
+                if (!isExpanded) {
+                    details.style.display = 'block';
+                    el.style.textDecoration = 'none';
+                }
+            };
+        });
+    </script>
+</body>
+</html>
